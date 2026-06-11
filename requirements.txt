@@ -1,0 +1,17 @@
+# Core RAG dependencies
+pymupdf==1.24.5                  # PDF parsing
+python-docx==1.1.2               # DOCX parsing
+sentence-transformers==3.0.1     # Embeddings
+chromadb==0.5.3                  # Vector database
+groq==0.9.0                      # LLM API
+
+# App & config
+streamlit==1.36.0                # UI
+python-dotenv==1.0.1             # .env file support
+
+# Evaluation
+ragas==0.1.14                    # RAG evaluation metrics
+
+# Utilities
+tiktoken==0.7.0                  # Token counting
+tqdm==4.66.4                     # Progress bars
