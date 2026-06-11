@@ -8,7 +8,7 @@
 
 ---
 
-## What is MediRAG?
+##  What is MediRAG?
 
 MediRAG is an intelligent Q&A assistant that answers questions **grounded in your own medical documents** — not from general LLM knowledge. Upload any clinical guideline, research paper, or medical report, and MediRAG will find the most relevant sections and generate a precise, sourced answer.
 
@@ -20,7 +20,7 @@ Unlike standard LLM chatbots, MediRAG:
 
 ---
 
-## Features
+##  Features
 
 | Feature | Description |
 |---|---|
@@ -37,49 +37,40 @@ Unlike standard LLM chatbots, MediRAG:
 
 ##  Architecture
 
-\```
-┌─────────────────────────────────────────────────────────┐
-│                      MediRAG Pipeline                   │
-├─────────────────────────────────────────────────────────┤
-│                                                         │
-│  [Document] ──► [Loader] ──► [Chunker] ──► [Embedder]  │
-│                                                  │      │
-│                                            [ChromaDB]   │
-│                                                  │      │
-│  [User Query] ──► [Embedder] ──► [Retriever] ───┘      │
-│                                       │                 │
-│                              [Context + Query]          │
-│                                       │                 │
-│                               [Groq LLM]                │
-│                                       │                 │
-│                    [Answer + Sources + Confidence]      │
-└─────────────────────────────────────────────────────────┘
-\```
+```
+[Document] → [Loader] → [Chunker] → [Embedder] → [ChromaDB]
+                                                       ↑
+[User Query] → [Embedder] → [Retriever] ───────────────┘
+                                  ↓
+                       [Context + Query] → [Groq LLM]
+                                                ↓
+                          [Answer + Sources + Confidence]
+```
 
 ---
 
 ##  Project Structure
 
-\```
+```
 medirag/
 ├── src/
-│   ├── loader.py         # Document ingestion (PDF, DOCX, TXT, MD)
-│   ├── chunker.py        # Smart text splitting with overlap
-│   ├── embedder.py       # Sentence-transformer embeddings
-│   ├── vectorstore.py    # ChromaDB storage & management
-│   ├── retriever.py      # Semantic search + confidence scoring
-│   └── generator.py      # Groq LLM answer generation
+│   ├── loader.py          # Document ingestion (PDF, DOCX, TXT, MD)
+│   ├── chunker.py         # Smart text splitting with overlap
+│   ├── embedder.py        # Sentence-transformer embeddings
+│   ├── vectorstore.py     # ChromaDB storage & management
+│   ├── retriever.py       # Semantic search + confidence scoring
+│   └── generator.py       # Groq LLM answer generation
 ├── notebooks/
-│   ├── 01_eda.ipynb      # Data exploration
-│   ├── 02_pipeline.ipynb # End-to-end pipeline demo
-│   └── 03_eval.ipynb     # RAGAS evaluation
+│   ├── 01_eda.ipynb       # Data exploration
+│   ├── 02_pipeline.ipynb  # End-to-end pipeline demo
+│   └── 03_eval.ipynb      # RAGAS evaluation
 ├── data/
-│   └── raw/              # Your medical documents go here
-├── app.py                # Streamlit UI
-├── config.py             # Configuration & API keys
+│   └── raw/               # Your medical documents go here
+├── app.py                 # Streamlit UI
+├── config.py              # Configuration & API keys
 ├── requirements.txt
 └── README.md
-\```
+```
 
 ---
 
@@ -96,6 +87,19 @@ medirag/
 
 ---
 
+##  Getting Started
+
+```bash
+git clone https://github.com/Fidan6557/medirag.git
+cd medirag
+pip install -r requirements.txt
+cp .env.example .env
+# Add your GROQ_API_KEY to .env
+streamlit run app.py
+```
+
+---
+
 ##  Development Roadmap
 
 - [x] **Day 1** — Document loading & chunking pipeline
@@ -105,6 +109,6 @@ medirag/
 
 ---
 
-##  License
+## License
 
 MIT License
