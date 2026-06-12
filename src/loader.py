@@ -9,7 +9,6 @@ import os
 from pathlib import Path
 from typing import List, Dict
 import fitz                        # PyMuPDF — PDF reading
-from docx import Document          # python-docx — DOCX reading
 
 
 def load_pdf(file_path: str) -> List[Dict]:
@@ -55,6 +54,9 @@ def load_docx(file_path: str) -> List[Dict]:
     """
     Loads a DOCX file and returns its content as a single dictionary.
     """
+    from docx import Document      # python-docx — imported lazily to avoid a DLL
+                                    # conflict with torch when loaded before it
+
     doc = Document(file_path)
     full_text = "\n".join(
         para.text for para in doc.paragraphs if para.text.strip()
