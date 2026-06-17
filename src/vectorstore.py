@@ -60,7 +60,7 @@ class VectorStore:
 
         for chunk in chunks:
             # Create a unique ID for each chunk based on source and chunk index
-            chunk_id = f"{chunk['metadata']['source']}_chunk_{chunk['metadata']['chunk_index']}"
+            chunk_id = f"{chunk['metadata']['source']}_page_{chunk['metadata']['page']}_chunk_{chunk['metadata']['chunk_index']}"
 
             if chunk_id in existing:
                 continue  # Skip if this chunk already exists
@@ -130,12 +130,12 @@ class VectorStore:
         Deletes all chunks from the database.
         Used when uploading a new document to reset the collection.
         """
-        self.client.delete_collection(name=COLLECTION_NAME)
+        self.client.delete_collection(COLLECTION_NAME)
         self.collection = self.client.get_or_create_collection(
             name=COLLECTION_NAME,
             metadata={"hnsw:space": "cosine"}
         )
-        print(" Vector store cleared. All chunks deleted.\n")
+        print("Vector store cleared. All chunks deleted.\n")
 
     def count(self) -> int:
         return self.collection.count()
