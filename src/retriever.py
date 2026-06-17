@@ -59,13 +59,13 @@ class Retriever:
         # 3) Apply threshold filter — remove weak results
         filtered = [r for r in raw_results if r["score"] >= threshold]
 
-        best_score = raw_results(r["score"] for r in filtered) if filtered else 0.0
+        best_score = max(r["score"] for r in filtered) if filtered else 0.0
         is_answerable = len(filtered) > 0
 
         if not is_answerable:
-            print(f"⚠️  Question not found in the document. (best score: {best_score:.2f} < {threshold})")
+            print(f"Question not found in the document. (best score: {best_score:.2f} < {threshold})")
         else:
-            print(f"✅ {len(filtered)} relevant chunks found. (best score: {best_score:.2f})")
+            print(f"{len(filtered)} relevant chunks found. (best score: {best_score:.2f})")
 
         return {
             "query": query,
