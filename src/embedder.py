@@ -50,6 +50,9 @@ class Embedder:
         Output: Same List[Dict] with an additional 'embedding' field
         """
         print(f"Embedding {len(chunks)} chunks...")
+        if not chunks:
+            print("No chunks to embed.\n")
+            return []
 
         texts = [chunk["text"] for chunk in chunks]
 

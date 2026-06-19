@@ -118,9 +118,14 @@ class MediRAGPipeline:
         """
         Processes all documents in the folder in parallel.
         """
+        path = Path(dir_path)
+        if not path.exists():
+            logger.warning(f"Directory not found: {dir_path}")
+            return []
+
         supported = {".pdf", ".docx", ".txt", ".md"}
         files = [
-            str(f) for f in Path(dir_path).iterdir()
+            str(f) for f in path.iterdir()
             if f.suffix.lower() in supported
         ]
 

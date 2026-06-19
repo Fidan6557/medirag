@@ -100,18 +100,26 @@ class VectorStore:
                 ...
             ]
         """
+        total_chunks = self.collection.count()
+        if total_chunks == 0 or top_k <= 0:
+            return []
+
         results = self.collection.query(
             query_embeddings=[query_embedding],
-            n_results=min(top_k, self.collection.count()),
+            n_results=min(top_k, total_chunks),
             include=["documents", "metadatas", "distances"]
         )
 
         # Process and format retrieved results
         chunks = []
+        documents = results.get("documents") or [[]]
+        metadatas = results.get("metadatas") or [[]]
+        distances = results.get("distances") or [[]]
+
         for doc, meta, dist in zip(
-            results["documents"][0],
-            results["metadatas"][0],
-            results["distances"][0]
+            documents[0],
+            metadatas[0],
+            distances[0]
         ):
             # ChromaDB returns cosine distance (0 = identical, 2 = completely different)
             # We convert it to similarity (1 = identical, 0 = completely different)

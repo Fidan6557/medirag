@@ -37,6 +37,13 @@ def chunk_text(text: str, source_metadata: Dict) -> List[Dict]:
     "...patient's blood pressure | 120/80 was..."
      chunk 1 ends here   chunk 2 starts here → meaning lost
     """
+    if CHUNK_SIZE <= 0:
+        raise ValueError("CHUNK_SIZE must be greater than 0")
+    if CHUNK_OVERLAP < 0:
+        raise ValueError("CHUNK_OVERLAP cannot be negative")
+    if CHUNK_OVERLAP >= CHUNK_SIZE:
+        raise ValueError("CHUNK_OVERLAP must be smaller than CHUNK_SIZE")
+
     tokenizer = get_tokenizer()
     tokens = tokenizer.encode(text)
 
