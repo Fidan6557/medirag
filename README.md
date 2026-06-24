@@ -105,7 +105,7 @@ streamlit run app.py
 - [x] **Day 1** — Document loading & chunking pipeline
 - [ ] **Day 2** — Embedding & vector storage (ChromaDB)
 - [ ] **Day 3** — Retrieval + LLM generation + confidence scoring
-- [ ] **Day 4** — Streamlit UI + evaluation dashboard + deployment
+- [ ] **Day 4** — Gradio UI with multilingual support and source highlighting
 
 ---
 
