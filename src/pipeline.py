@@ -20,7 +20,7 @@ import asyncio
 import logging
 import time
 from pathlib import Path
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 from src.loader import load_document, load_directory
 from src.chunker import chunk_documents
@@ -35,6 +35,8 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s",
     datefmt="%H:%M:%S"
 )
+for noisy_logger in ("httpx", "httpcore", "sentence_transformers", "huggingface_hub"):
+    logging.getLogger(noisy_logger).setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 
@@ -135,24 +137,43 @@ class MediRAGPipeline:
 
         return await self.ingest_many(files)
 
-    async def ask(self, query: str) -> Dict:
+    async def ask(
+        self,
+        query: str,
+        response_instruction: Optional[str] = None,
+    ) -> Dict:
         """
         Asks a question and retrieves an answer.
         """
         logger.info(f"Question: {query}")
         start = time.time()
 
-        # 1) Retrieve
+        # 1) Build retrieval query
+        retrieval_query = query
+        if self.generator.should_rewrite_query_for_retrieval(query):
+            rewritten_query = await asyncio.to_thread(
+                self.generator.rewrite_query_for_retrieval,
+                query,
+            )
+            if rewritten_query != query:
+                retrieval_query = f"{query}\n{rewritten_query}"
+                logger.info(f"Retrieval rewrite: {rewritten_query}")
+
+        # 2) Retrieve
         retrieval_result = await asyncio.to_thread(
-            self.retriever.retrieve, query
+            self.retriever.retrieve, retrieval_query
         )
 
-        # 2) Format context
+        # 3) Format context
         context = self.retriever.format_context(retrieval_result["results"])
 
-        # 3) Generate
+        # 4) Generate
         response = await asyncio.to_thread(
-            self.generator.generate, query, context, retrieval_result
+            self.generator.generate,
+            query,
+            context,
+            retrieval_result,
+            response_instruction,
         )
 
         elapsed = time.time() - start
@@ -170,8 +191,13 @@ class MediRAGPipeline:
 
     def get_stats(self) -> Dict:
         """Pipeline statistics."""
+        if hasattr(self.embedder.model, "get_embedding_dimension"):
+            embedding_dimension = self.embedder.model.get_embedding_dimension()
+        else:
+            embedding_dimension = self.embedder.model.get_sentence_embedding_dimension()
+
         return {
             "total_chunks": self.vectorstore.count(),
-            "model"       : self.embedder.model.get_sentence_embedding_dimension(),
+            "model"       : embedding_dimension,
             "collection"  : self.vectorstore.collection.name
         }

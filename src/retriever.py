@@ -9,10 +9,42 @@ This is the foundation of out-of-scope detection:
   - If the score is low   → respond with "not found in the document"
 """
 
-from typing import Dict, List, Tuple
+import re
+from typing import Dict, List, Set
+
 from src.embedder import Embedder
 from src.vectorstore import VectorStore
 from config import TOP_K, CONFIDENCE_THRESHOLD
+
+_TOKEN_RE = re.compile(r"\b[\w]+\b", re.UNICODE)
+_STOPWORDS: Set[str] = {
+    "a", "an", "and", "are", "as", "at", "by", "for", "from", "how",
+    "in", "is", "it", "of", "on", "or", "the", "to", "used", "use",
+    "what", "when", "where", "which", "who", "why",
+    "bu", "bir", "ile", "ilə", "ne", "nə", "nedir", "nədir", "ucun",
+    "üçün", "istifade", "istifadə", "olunur", "edir",
+    "в", "и", "как", "на", "о", "об", "от", "по", "что", "это",
+}
+
+
+def _tokenise(text: str) -> Set[str]:
+    return {
+        token
+        for token in _TOKEN_RE.findall(text.lower())
+        if len(token) > 1 and token not in _STOPWORDS
+    }
+
+
+def _lexical_overlap(query: str, text: str) -> float:
+    query_tokens = _tokenise(query)
+    if not query_tokens:
+        return 0.0
+
+    text_tokens = _tokenise(text)
+    if not text_tokens:
+        return 0.0
+
+    return len(query_tokens & text_tokens) / len(query_tokens)
 
 
 class Retriever:
@@ -46,8 +78,10 @@ class Retriever:
         # 1) Convert the question into a vector (embedding)
         query_embedding = self.embedder.embed_text(query)
 
-        # 2) Search in the VectorStore 
-        raw_results = self.vectorstore.search(query_embedding, top_k=top_k)
+        # 2) Search in the VectorStore. Pull extra candidates so lexical
+        # reranking can rescue exact matches that semantic search placed lower.
+        search_k = max(top_k * 4, top_k)
+        raw_results = self.vectorstore.search(query_embedding, top_k=search_k)
 
         if not raw_results:
             return {
@@ -56,10 +90,38 @@ class Retriever:
                 "is_answerable": False,
                 "best_score": 0.0
             }
-        # 3) Apply threshold filter — remove weak results
-        filtered = [r for r in raw_results if r["score"] >= threshold]
+        # 3) Rerank using semantic score + exact keyword overlap.
+        ranked_results = []
+        for result in raw_results:
+            lexical_score = _lexical_overlap(query, result["text"])
+            combined_score = (result["score"] * 0.75) + (lexical_score * 0.25)
+            length_factor = min(1.0, max(0.60, len(result["text"].split()) / 80))
+            combined_score *= length_factor
+            ranked_results.append({
+                **result,
+                "semantic_score": result["score"],
+                "lexical_score": round(lexical_score, 4),
+                "length_factor": round(length_factor, 4),
+                "score": round(combined_score, 4),
+            })
 
-        best_score = max(r["score"] for r in filtered) if filtered else 0.0
+        ranked_results.sort(key=lambda r: r["score"], reverse=True)
+
+        if any(r["lexical_score"] > 0 for r in ranked_results):
+            ranked_results = [
+                r for r in ranked_results
+                if r["lexical_score"] > 0
+            ]
+
+        # 4) Apply threshold filter — remove weak results
+        raw_best_score = ranked_results[0]["score"]
+        min_relevant_score = max(threshold, raw_best_score - 0.10)
+        filtered = [
+            r for r in ranked_results
+            if r["score"] >= min_relevant_score
+        ][:top_k]
+
+        best_score = raw_best_score
         is_answerable = len(filtered) > 0
 
         if not is_answerable:

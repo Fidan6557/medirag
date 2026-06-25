@@ -2,148 +2,151 @@
 vectorstore.py — Vector Database Module
 
 Stores chunk embeddings in ChromaDB.
-Finds the most relevant chunks using similarity search.
+Finds the most relevant chunks via cosine-similarity search.
 
-How ChromaDB works:
-  - Stores vectors on disk (./chroma_db/)
-  - Performs search using cosine similarity
-  - Also stores metadata (source, page, chunk_index)
+Key fix vs original:
+  - add_chunks() previously called collection.get() with no filter, which
+    loads every stored embedding into RAM on large databases.
+  - Now it builds the new IDs first, then asks ChromaDB for only those
+    specific IDs — O(batch) instead of O(total collection).
 """
+
+import logging
+from typing import List, Dict
 
 import chromadb
 from chromadb.config import Settings
-from typing import List, Dict 
+
 from config import CHROMA_PERSIST_DIR, COLLECTION_NAME, TOP_K
+
+logger = logging.getLogger(__name__)
 
 
 class VectorStore:
-    """
-    VectorStore class responsible"""
+    """Manages persistent vector storage with ChromaDB."""
 
     def __init__(self):
-        print("ChromaDB is starting...")
+        logger.info("Starting ChromaDB…")
 
-        # ChromaDB client — writes data to disk
         self.client = chromadb.PersistentClient(
             path=CHROMA_PERSIST_DIR,
-            settings=Settings(anonymized_telemetry=False)
+            settings=Settings(anonymized_telemetry=False),
         )
 
-        # Collection — similar to a table in SQL
         self.collection = self.client.get_or_create_collection(
             name=COLLECTION_NAME,
-            metadata={"hnsw:space": "cosine"}  # use cosine similarity for search
+            metadata={"hnsw:space": "cosine"},
         )
 
-        print(f" ChromaDB is ready.")
-        print(f" Collection: {COLLECTION_NAME}")
-        print(f"   Existing chunk count: {self.collection.count()}\n")
+        logger.info(
+            f"ChromaDB ready — collection '{COLLECTION_NAME}', "
+            f"{self.collection.count()} chunk(s) stored.\n"
+        )
+
+    # ── write ─────────────────────────────────────────────────────────────────
 
     def add_chunks(self, chunks: List[Dict]) -> None:
         """
         Adds embedded chunks to ChromaDB.
-
-        For each chunk, the following information is stored:
-            - id         : unique identifier (source + chunk_index)
-            - embedding  : vector representation of the chunk
-            - metadata   : source, page, format, chunk_index
-            - document   : original text content
+        Skips any chunk whose ID is already present (idempotent).
         """
         if not chunks:
-            print("No chunks to add to the vector store.")
+            logger.info("No chunks to add.")
             return
-        
-        # Skip chunks that already exist in the database
-        existing = set(self.collection.get()["ids"])
 
-        ids, embeddings, metadatas, documents = [], [], [], []
-
+        # Build candidate IDs first
+        candidate: Dict[str, Dict] = {}
         for chunk in chunks:
-            # Create a unique ID for each chunk based on source and chunk index
-            chunk_id = f"{chunk['metadata']['source']}_page_{chunk['metadata']['page']}_chunk_{chunk['metadata']['chunk_index']}"
+            m = chunk["metadata"]
+            cid = (
+                f"{m['source']}_page_{m['page']}"
+                f"_chunk_{m['chunk_index']}"
+            )
+            candidate[cid] = chunk
 
-            if chunk_id in existing:
-                continue  # Skip if this chunk already exists
+        # Ask ChromaDB only for the IDs we care about (cheap)
+        try:
+            existing_result = self.collection.get(
+                ids=list(candidate.keys()),
+                include=[],          # we only need the IDs, not the data
+            )
+            existing_ids = set(existing_result["ids"])
+        except Exception:
+            # get() with explicit ids never returns "not found" as an error,
+            # but guard anyway
+            existing_ids = set()
 
-            ids.append(chunk_id)
+        new_ids, embeddings, metadatas, documents = [], [], [], []
+
+        for cid, chunk in candidate.items():
+            if cid in existing_ids:
+                continue
+            new_ids.append(cid)
             embeddings.append(chunk["embedding"])
             metadatas.append(chunk["metadata"])
             documents.append(chunk["text"])
 
-        if not ids:
-            print(" All chunks already exist in the vector store. No new chunks added.")
+        if not new_ids:
+            logger.info("All chunks already exist — nothing new to add.")
             return
 
-        # Add data to ChromaDB in batches
         self.collection.add(
-            ids=ids,
+            ids=new_ids,
             embeddings=embeddings,
             metadatas=metadatas,
-            documents=documents
+            documents=documents,
         )
 
-        print(f" {len(ids)} new chunks added to the vector store.")
-        print(f"  Total chunk count: {self.collection.count()}\n")
+        logger.info(
+            f"{len(new_ids)} new chunk(s) added. "
+            f"Total: {self.collection.count()}\n"
+        )
 
+    # ── read ──────────────────────────────────────────────────────────────────
 
-    def search(self, query_embedding: List[float], top_k: int = TOP_K) -> List[Dict]:
+    def search(
+        self, query_embedding: List[float], top_k: int = TOP_K
+    ) -> List[Dict]:
         """
-        Finds the chunks that are most similar to the query vector.
+        Returns the *top_k* chunks most similar to *query_embedding*.
 
-        Returns:
-            [
-                {
-                    "text": "...",
-                    "metadata": {...},
-                    "score": 0.87  # similarity score (0–1)
-                },
-                ...
-            ]
+        ChromaDB returns cosine distance, where lower is better. For cosine
+        space, distance is approximately 1 - cosine similarity, so we expose
+        a clamped similarity score in [0, 1].
         """
-        total_chunks = self.collection.count()
-        if total_chunks == 0 or top_k <= 0:
+        total = self.collection.count()
+        if total == 0 or top_k <= 0:
             return []
 
         results = self.collection.query(
             query_embeddings=[query_embedding],
-            n_results=min(top_k, total_chunks),
-            include=["documents", "metadatas", "distances"]
+            n_results=min(top_k, total),
+            include=["documents", "metadatas", "distances"],
         )
 
-        # Process and format retrieved results
-        chunks = []
-        documents = results.get("documents") or [[]]
-        metadatas = results.get("metadatas") or [[]]
-        distances = results.get("distances") or [[]]
+        docs      = (results.get("documents") or [[]])[0]
+        metas     = (results.get("metadatas") or [[]])[0]
+        distances = (results.get("distances") or [[]])[0]
 
-        for doc, meta, dist in zip(
-            documents[0],
-            metadatas[0],
-            distances[0]
-        ):
-            # ChromaDB returns cosine distance (0 = identical, 2 = completely different)
-            # We convert it to similarity (1 = identical, 0 = completely different)
-            score = 1 - (dist / 2)
-
-            chunks.append({
-                "text": doc,
+        return [
+            {
+                "text":     doc,
                 "metadata": meta,
-                "score": score
-            })
+                "score":    round(max(0.0, min(1.0, 1 - dist)), 4),
+            }
+            for doc, meta, dist in zip(docs, metas, distances)
+        ]
 
-        return chunks
-    
+    # ── utility ───────────────────────────────────────────────────────────────
+
     def clear(self) -> None:
-        """
-        Deletes all chunks from the database.
-        Used when uploading a new document to reset the collection.
-        """
+        """Deletes and recreates the collection (wipes all chunks)."""
         self.client.delete_collection(COLLECTION_NAME)
         self.collection = self.client.get_or_create_collection(
             name=COLLECTION_NAME,
-            metadata={"hnsw:space": "cosine"}
+            metadata={"hnsw:space": "cosine"},
         )
-        print("Vector store cleared. All chunks deleted.\n")
+        logger.info("Vector store cleared.\n")
 
     def count(self) -> int:
         return self.collection.count()
