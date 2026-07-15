@@ -5,13 +5,26 @@ app.py — MediRAG Gradio UI
 import asyncio
 import logging
 from pathlib import Path
+from threading import Lock
+from typing import Optional
 
 import gradio as gr
 
 from src.pipeline import MediRAGPipeline
 
 logger  = logging.getLogger(__name__)
-pipeline = MediRAGPipeline()
+_pipeline: Optional[MediRAGPipeline] = None
+_pipeline_lock = Lock()
+
+
+def get_pipeline() -> MediRAGPipeline:
+    """Initialise heavy ML dependencies only when the app first needs them."""
+    global _pipeline
+    if _pipeline is None:
+        with _pipeline_lock:
+            if _pipeline is None:
+                _pipeline = MediRAGPipeline()
+    return _pipeline
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -35,14 +48,20 @@ def process_documents(files):
     if not files:
         return "⚠️ No files uploaded."
 
+    pipeline = get_pipeline()
     pipeline.clear_knowledge_base()
 
     names = []
     errors = []
     for file in files:
         try:
-            run_async(pipeline.ingest_document(file.name))
-            names.append(Path(file.name).name)
+            result = run_async(pipeline.ingest_document(file.name))
+            if result["success"]:
+                names.append(Path(file.name).name)
+            else:
+                errors.append(
+                    f"✗ {Path(file.name).name}: {result.get('error', 'processing failed')}"
+                )
         except Exception as e:
             errors.append(f"✗ {Path(file.name).name}: {e}")
 
@@ -67,6 +86,7 @@ def chat(message: str, history: list, language: str):
     }.get(language, "Respond in English.")
 
     try:
+        pipeline = get_pipeline()
         result = run_async(
             pipeline.ask(message, response_instruction=lang_hint)
         )
@@ -78,7 +98,7 @@ def chat(message: str, history: list, language: str):
         return f"⚠️ **Unexpected error:** {e}"
 
     if not result["answered"]:
-        return "❌ This information is not available in the uploaded documents."
+        return f"❌ {result['answer']}"
 
     sources = ""
     if result.get("sources"):

@@ -20,9 +20,9 @@ import asyncio
 import logging
 import time
 from pathlib import Path
-from typing import List, Dict, Optional
+from typing import Any, Dict, List, Optional
 
-from src.loader import load_document, load_directory
+from src.loader import load_document
 from src.chunker import chunk_documents
 from src.embedder import Embedder
 from src.vectorstore import VectorStore
@@ -50,13 +50,18 @@ class MediRAGPipeline:
         result = await pipeline.ask("What is the dosage of paracetamol?")
     """
 
-    def __init__(self):                          # ← Self deyil, self olmalıdır
+    def __init__(
+        self,
+        embedder: Optional[Any] = None,
+        vectorstore: Optional[Any] = None,
+        generator: Optional[Any] = None,
+    ):
         logger.info("MediRAG Pipeline is launching...")
 
-        self.embedder    = Embedder()
-        self.vectorstore = VectorStore()
+        self.embedder    = embedder or Embedder()
+        self.vectorstore = vectorstore or VectorStore()
         self.retriever   = Retriever(self.embedder, self.vectorstore)
-        self.generator   = Generator()
+        self.generator   = generator or Generator()
 
         logger.info("Pipeline is ready.\n")
 
@@ -65,12 +70,11 @@ class MediRAGPipeline:
         """
         Processes a single document asynchronously.
         """
-        start = time.time()                      # ← start əvvəldə olmalıdır
-        path = Path(file_path)                   # ← path təyin edilməmişdi
+        start = time.time()
+        path = Path(file_path)
 
-        if not path.exists():
-            logger.error(f"File not found: {file_path}")
-            return {"success": False, "file": file_path, "chunks": 0}
+        if not path.is_file():
+            raise FileNotFoundError(f"File not found: {file_path}")
 
         logger.info(f"Processing: {path.name}")
 
@@ -107,7 +111,19 @@ class MediRAGPipeline:
         logger.info(f"{len(file_paths)} documents are being processed in parallel...")
         start = time.time()
 
-        tasks = [self.ingest_document(fp) for fp in file_paths]
+        async def ingest_safely(file_path: str) -> Dict:
+            try:
+                return await self.ingest_document(file_path)
+            except Exception as exc:
+                logger.exception("Failed to ingest %s", file_path)
+                return {
+                    "success": False,
+                    "file": Path(file_path).name,
+                    "chunks": 0,
+                    "error": str(exc),
+                }
+
+        tasks = [ingest_safely(fp) for fp in file_paths]
         results = await asyncio.gather(*tasks)
 
         elapsed = time.time() - start
@@ -147,6 +163,19 @@ class MediRAGPipeline:
         """
         logger.info(f"Question: {query}")
         start = time.time()
+
+        query = query.strip()
+        if not query:
+            raise ValueError("Question cannot be empty.")
+
+        if self.vectorstore.count() == 0:
+            return {
+                "answer": "No documents have been indexed yet.",
+                "sources": [],
+                "score": 0.0,
+                "answered": False,
+                "time": time.time() - start,
+            }
 
         # 1) Build retrieval query
         retrieval_query = query

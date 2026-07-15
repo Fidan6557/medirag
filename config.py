@@ -3,7 +3,6 @@ config.py — MediRAG Configuration
 """
 
 import os
-import sys
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -12,15 +11,6 @@ load_dotenv()
 # ── LLM ────────────────────────────────────────────────
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_MODEL   = "llama-3.1-8b-instant"
-
-if not GROQ_API_KEY:
-    print(
-        "ERROR: GROQ_API_KEY is not set.\n"
-        "  1) Copy .env.example to .env\n"
-        "  2) Add your key from https://console.groq.com\n",
-        file=sys.stderr,
-    )
-    sys.exit(1)
 
 
 # ── Embedding ───────────────────────────────────────────

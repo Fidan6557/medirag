@@ -26,12 +26,11 @@ Unlike standard LLM chatbots, MediRAG:
 |---|---|
 |  Multi-format ingestion | PDF, DOCX, TXT, MD |
 |  Semantic search | Embedding-based retrieval with ChromaDB |
-|  LLM-powered answers | Groq (Llama 3) integration |
+|  LLM-powered answers | Groq (Llama 3.1) integration |
 |  Source highlighting | Exact page + passage for every answer |
 |  Confidence scoring | Retrieval similarity score shown per response |
 |  Out-of-scope detection | Refuses to answer if context is insufficient |
 |  Multilingual | English, Azerbaijani, Russian |
-|  Evaluation dashboard | Precision, recall, faithfulness metrics via RAGAS |
 
 ---
 
@@ -60,13 +59,9 @@ medirag/
 │   ├── vectorstore.py     # ChromaDB storage & management
 │   ├── retriever.py       # Semantic search + confidence scoring
 │   └── generator.py       # Groq LLM answer generation
-├── notebooks/
-│   ├── 01_eda.ipynb       # Data exploration
-│   ├── 02_pipeline.ipynb  # End-to-end pipeline demo
-│   └── 03_eval.ipynb      # RAGAS evaluation
 ├── data/
 │   └── raw/               # Your medical documents go here
-├── app.py                 # Streamlit UI
+├── app.py                 # Gradio UI
 ├── config.py              # Configuration & API keys
 ├── requirements.txt
 └── README.md
@@ -78,11 +73,11 @@ medirag/
 
 | Component | Technology |
 |---|---|
-| Embeddings | `sentence-transformers` (`all-MiniLM-L6-v2`) |
+| Embeddings | `sentence-transformers` (`paraphrase-multilingual-MiniLM-L12-v2`) |
 | Vector Database | `ChromaDB` |
 | LLM | `Groq` — Llama 3.1 8B |
 | Document Parsing | `PyMuPDF`, `python-docx` |
-| UI | `Streamlit` |
+| UI | `Gradio` |
 | Evaluation | `RAGAS` |
 
 ---
@@ -95,7 +90,7 @@ cd medirag
 pip install -r requirements.txt
 cp .env.example .env
 # Add your GROQ_API_KEY to .env
-streamlit run app.py
+python app.py
 ```
 
 ---
@@ -103,9 +98,9 @@ streamlit run app.py
 ##  Development Roadmap
 
 - [x] **Day 1** — Document loading & chunking pipeline
-- [ ] **Day 2** — Embedding & vector storage (ChromaDB)
-- [ ] **Day 3** — Retrieval + LLM generation + confidence scoring
-- [ ] **Day 4** — Gradio UI with multilingual support and source highlighting
+- [x] **Day 2** — Embedding & vector storage (ChromaDB)
+- [x] **Day 3** — Retrieval + LLM generation + confidence scoring
+- [x] **Day 4** — Gradio UI with multilingual support and source highlighting
 
 ---
 

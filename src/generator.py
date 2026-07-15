@@ -37,7 +37,9 @@ class Generator:
     """Generates answers using the Groq LLM."""
 
     def __init__(self):
-        self.client = Groq(api_key=GROQ_API_KEY)
+        # Keep imports, document ingestion, and local retrieval usable without
+        # an API key. A clear error is raised only when an LLM call is needed.
+        self.client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
         self.model  = GROQ_MODEL
 
         self.system_prompt = (
@@ -147,7 +149,8 @@ class Generator:
         )
 
         try:
-            response = self.client.chat.completions.create(
+            client = self._require_client()
+            response = client.chat.completions.create(
                 model=self.model,
                 messages=[
                     {
@@ -167,16 +170,25 @@ class Generator:
 
     # ── private ───────────────────────────────────────────────────────────────
 
+    def _require_client(self) -> Groq:
+        if self.client is None:
+            raise RuntimeError(
+                "GROQ_API_KEY is not configured. Copy .env.example to .env "
+                "and add your key from https://console.groq.com."
+            )
+        return self.client
+
     def _call_with_retry(self, user_prompt: str) -> str:
         """
         Calls the Groq API with exponential back-off on rate-limit errors.
         Raises a RuntimeError with a user-friendly message on permanent failure.
         """
         delay = _RETRY_DELAY_S
+        client = self._require_client()
 
         for attempt in range(1, _MAX_RETRIES + 1):
             try:
-                response = self.client.chat.completions.create(
+                response = client.chat.completions.create(
                     model=self.model,
                     messages=[
                         {"role": "system", "content": self.system_prompt},
