@@ -2,7 +2,6 @@
 app.py — MediRAG Gradio UI
 """
 
-import asyncio
 import logging
 from pathlib import Path
 from threading import Lock
@@ -27,24 +26,9 @@ def get_pipeline() -> MediRAGPipeline:
     return _pipeline
 
 
-# ── helpers ───────────────────────────────────────────────────────────────────
-
-def run_async(coro):
-    """Runs an async coroutine from synchronous Gradio callbacks."""
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_closed():
-            raise RuntimeError
-        return loop.run_until_complete(coro)
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        return loop.run_until_complete(coro)
-
-
 # ── callbacks ─────────────────────────────────────────────────────────────────
 
-def process_documents(files):
+async def process_documents(files):
     if not files:
         return "⚠️ No files uploaded."
 
@@ -53,17 +37,14 @@ def process_documents(files):
 
     names = []
     errors = []
-    for file in files:
-        try:
-            result = run_async(pipeline.ingest_document(file.name))
-            if result["success"]:
-                names.append(Path(file.name).name)
-            else:
-                errors.append(
-                    f"✗ {Path(file.name).name}: {result.get('error', 'processing failed')}"
-                )
-        except Exception as e:
-            errors.append(f"✗ {Path(file.name).name}: {e}")
+    results = await pipeline.ingest_many([file.name for file in files])
+    for result in results:
+        if result["success"]:
+            names.append(result["file"])
+        else:
+            errors.append(
+                f"✗ {result['file']}: {result.get('error', 'processing failed')}"
+            )
 
     stats = pipeline.get_stats()
     lines = [f"✅ {len(names)} document(s) processed — {stats['total_chunks']} chunks indexed."]
@@ -72,13 +53,8 @@ def process_documents(files):
     return "\n".join(lines)
 
 
-def chat(message: str, history: list, language: str):
-    """
-    Gradio ChatInterface callback.
-
-    history is a list of [user_msg, assistant_msg] pairs — we include it
-    in the context so the LLM can refer to earlier turns.
-    """
+async def chat(message: str, history: list, language: str):
+    """Answer one question using the currently indexed documents."""
     lang_hint = {
         "English":    "Respond in English.",
         "Azərbaycan": "Cavabı Azərbaycan dilində ver.",
@@ -87,9 +63,7 @@ def chat(message: str, history: list, language: str):
 
     try:
         pipeline = get_pipeline()
-        result = run_async(
-            pipeline.ask(message, response_instruction=lang_hint)
-        )
+        result = await pipeline.ask(message, response_instruction=lang_hint)
     except RuntimeError as e:
         # Propagated from Generator (auth error, rate limit, etc.)
         return f"⚠️ **Service error:** {e}"
@@ -108,11 +82,16 @@ def chat(message: str, history: list, language: str):
         )
 
     score = result["score"]
-    conf  = "🟢 High" if score >= 0.55 else "🟡 Medium" if score >= 0.30 else "🔴 Low"
+    relevance = (
+        "🟢 High" if score >= 0.55
+        else "🟡 Medium" if score >= 0.30
+        else "🔴 Low"
+    )
 
     return (
         f"{result['answer']}{sources}\n\n"
-        f"`Confidence: {conf} ({score:.0%}) · ⏱ {result['time']:.1f}s`"
+        f"`Retrieval relevance: {relevance} ({score:.0%}) · "
+        f"⏱ {result['time']:.1f}s`"
     )
 
 
@@ -122,11 +101,14 @@ CSS = """
 body, .gradio-container { background-color: #F0FDF4 !important; }
 """
 
-with gr.Blocks(title="MediRAG", css=CSS, theme=gr.themes.Soft(primary_hue="green", neutral_hue="stone")) as demo:
+with gr.Blocks(title="MediRAG") as demo:
 
     gr.Markdown("""
     # 🩺 MediRAG
     **Medical Document Intelligence System** — Ask questions about your medical documents.
+
+    > **Medical disclaimer:** Answers may be incomplete or incorrect. Do not use
+    > MediRAG as a substitute for diagnosis, treatment, or professional medical advice.
     """)
 
     with gr.Row():
@@ -165,4 +147,7 @@ with gr.Blocks(title="MediRAG", css=CSS, theme=gr.themes.Soft(primary_hue="green
 
 
 if __name__ == "__main__":
-    demo.launch()
+    demo.queue(default_concurrency_limit=1).launch(
+        css=CSS,
+        theme=gr.themes.Soft(primary_hue="green", neutral_hue="stone"),
+    )

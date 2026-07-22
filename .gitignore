@@ -6,6 +6,12 @@ chroma_db/
 __pycache__/
 *.pyc
 *.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
 
 # Virtual environment
 venv/
@@ -20,4 +26,5 @@ data/processed/
 
 # OS files
 .DS_Store
+Thumbs.db
 

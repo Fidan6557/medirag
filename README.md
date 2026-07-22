@@ -1,109 +1,135 @@
-# 🩺 MediRAG — Medical Document Intelligence System
+# 🩺 MediRAG
 
-> A production-ready Retrieval-Augmented Generation (RAG) system for medical document analysis, featuring multilingual support, source transparency, and confidence-aware responses.
+MediRAG is a local Retrieval-Augmented Generation (RAG) prototype for asking
+questions about medical documents. It retrieves relevant excerpts from uploaded
+files and asks a Groq-hosted language model to answer using those excerpts.
 
-![Python](https://img.shields.io/badge/Python-3.10+-blue?style=flat-square&logo=python)
-![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
-![Status](https://img.shields.io/badge/Status-Active-brightgreen?style=flat-square)
+> [!WARNING]
+> MediRAG may produce incomplete or incorrect answers. It is not a medical
+> device and must not replace diagnosis, treatment, or professional medical
+> advice. Verify important information against the original document.
 
----
+## Features
 
-##  What is MediRAG?
+- PDF, DOCX, TXT, and Markdown ingestion
+- Multilingual sentence-transformer embeddings
+- Persistent cosine-similarity search with ChromaDB
+- Groq answer generation with document and page references
+- English, Azerbaijani, and Russian response controls
+- Retrieval relevance scoring and weak-match rejection
+- Local Gradio interface
 
-MediRAG is an intelligent Q&A assistant that answers questions **grounded in your own medical documents** — not from general LLM knowledge. Upload any clinical guideline, research paper, or medical report, and MediRAG will find the most relevant sections and generate a precise, sourced answer.
+The displayed score measures retrieval relevance. It is not a guarantee that an
+answer is medically correct.
 
-Unlike standard LLM chatbots, MediRAG:
-- **Never hallucinates** — if the answer isn't in the document, it says so
-- **Shows its sources** — every answer includes the exact page and passage used
-- **Scores its confidence** — so you know how reliable each response is
-- **Speaks your language** — supports English, Azerbaijani, and Russian
+## Architecture
 
----
-
-##  Features
-
-| Feature | Description |
-|---|---|
-|  Multi-format ingestion | PDF, DOCX, TXT, MD |
-|  Semantic search | Embedding-based retrieval with ChromaDB |
-|  LLM-powered answers | Groq (Llama 3.1) integration |
-|  Source highlighting | Exact page + passage for every answer |
-|  Confidence scoring | Retrieval similarity score shown per response |
-|  Out-of-scope detection | Refuses to answer if context is insufficient |
-|  Multilingual | English, Azerbaijani, Russian |
-
----
-
-##  Architecture
-
-```
-[Document] → [Loader] → [Chunker] → [Embedder] → [ChromaDB]
-                                                       ↑
-[User Query] → [Embedder] → [Retriever] ───────────────┘
-                                  ↓
-                       [Context + Query] → [Groq LLM]
-                                                ↓
-                          [Answer + Sources + Confidence]
+```text
+Document -> Loader -> Token chunker -> Embedder -> ChromaDB
+                                                  |
+Question -> Optional query rewrite -> Retriever --+
+                                      |
+                         Context + question -> Groq LLM -> Answer + references
 ```
 
----
+## Requirements
 
-##  Project Structure
+- Python 3.10 or newer
+- A Groq API key
+- Internet access on first run to download the embedding model
 
-```
-medirag/
-├── src/
-│   ├── loader.py          # Document ingestion (PDF, DOCX, TXT, MD)
-│   ├── chunker.py         # Smart text splitting with overlap
-│   ├── embedder.py        # Sentence-transformer embeddings
-│   ├── vectorstore.py     # ChromaDB storage & management
-│   ├── retriever.py       # Semantic search + confidence scoring
-│   └── generator.py       # Groq LLM answer generation
-├── data/
-│   └── raw/               # Your medical documents go here
-├── app.py                 # Gradio UI
-├── config.py              # Configuration & API keys
-├── requirements.txt
-└── README.md
-```
-
----
-
-##  Tech Stack
-
-| Component | Technology |
-|---|---|
-| Embeddings | `sentence-transformers` (`paraphrase-multilingual-MiniLM-L12-v2`) |
-| Vector Database | `ChromaDB` |
-| LLM | `Groq` — Llama 3.1 8B |
-| Document Parsing | `PyMuPDF`, `python-docx` |
-| UI | `Gradio` |
-| Evaluation | `RAGAS` |
-
----
-
-##  Getting Started
+## Setup
 
 ```bash
 git clone https://github.com/Fidan6557/medirag.git
 cd medirag
-pip install -r requirements.txt
+python -m venv .venv
+```
+
+Activate the environment:
+
+```powershell
+# Windows PowerShell
+.\.venv\Scripts\Activate.ps1
+```
+
+```bash
+# macOS/Linux
+source .venv/bin/activate
+```
+
+Install dependencies and create the local environment file:
+
+```bash
+python -m pip install -r requirements.txt
 cp .env.example .env
-# Add your GROQ_API_KEY to .env
+```
+
+On Windows PowerShell, use `Copy-Item .env.example .env` instead of `cp` if
+`cp` is unavailable. Set `GROQ_API_KEY` in `.env`, then start the app:
+
+```bash
 python app.py
 ```
 
----
+Open the local URL printed by Gradio, upload one or more supported documents,
+select a response language, and process the files before asking questions.
+Processing a new upload replaces the current local knowledge base.
 
-##  Development Roadmap
+## Configuration
 
-- [x] **Day 1** — Document loading & chunking pipeline
-- [x] **Day 2** — Embedding & vector storage (ChromaDB)
-- [x] **Day 3** — Retrieval + LLM generation + confidence scoring
-- [x] **Day 4** — Gradio UI with multilingual support and source highlighting
+The following values can be set in `.env`:
 
----
+| Variable | Required | Default |
+|---|---:|---|
+| `GROQ_API_KEY` | Yes | — |
+| `GROQ_MODEL` | No | `llama-3.1-8b-instant` |
+| `CHROMA_PERSIST_DIR` | No | `<project>/chroma_db` |
+| `COLLECTION_NAME` | No | `medirag_docs` |
+
+Local documents, the ChromaDB database, `.env`, virtual environments, and
+Python caches are excluded by `.gitignore`.
+
+## Tests
+
+The unit tests use lightweight fakes and do not call Groq or download an
+embedding model:
+
+```bash
+python -m unittest discover -v
+python -m compileall -q app.py config.py src tests
+```
+
+`test_day2.py` and `test_day3.py` are optional manual integration checks. They
+load the real embedding model; `test_day3.py` also expects
+`data/raw/data_for_medirag.pdf` and a working Groq API key.
+
+## Project layout
+
+```text
+medirag/
+├── src/
+│   ├── loader.py
+│   ├── chunker.py
+│   ├── embedder.py
+│   ├── vectorstore.py
+│   ├── retriever.py
+│   ├── generator.py
+│   └── pipeline.py
+├── tests/
+├── app.py
+├── config.py
+├── requirements.txt
+└── .env.example
+```
+
+## Privacy
+
+Document text is stored locally in ChromaDB. Retrieved excerpts and questions
+are sent to Groq for answer generation. Do not upload sensitive patient data
+unless your use complies with the applicable privacy, security, and contractual
+requirements.
 
 ## License
 
-MIT License
+MIT — see [LICENSE](LICENSE).

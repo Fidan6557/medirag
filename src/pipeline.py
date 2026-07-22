@@ -4,10 +4,9 @@ pipeline.py — Main MediRAG Pipeline
 Integrates all modules:
   loader → chunker → embedder → vectorstore → retriever → generator
 
-Processes multiple documents concurrently using asyncio:
-  - Each document is embedded in a separate task
-  - asyncio.gather() executes all tasks simultaneously
-  - Provides significant speed improvements for large document collections
+Processes multiple documents as a fault-tolerant batch. Documents are handled
+sequentially because the shared embedding model and ChromaDB collection are not
+assumed to be safe for concurrent writes.
 
 Software Engineering Principles:
   - Facade Pattern         : hides system complexity behind a simple interface
@@ -106,9 +105,9 @@ class MediRAGPipeline:
 
     async def ingest_many(self, file_paths: List[str]) -> List[Dict]:
         """
-        Multiple documents processed in parallel using asyncio.gather().
+        Processes multiple documents without aborting after one bad file.
         """
-        logger.info(f"{len(file_paths)} documents are being processed in parallel...")
+        logger.info(f"Processing a batch of {len(file_paths)} document(s)...")
         start = time.time()
 
         async def ingest_safely(file_path: str) -> Dict:
@@ -123,8 +122,9 @@ class MediRAGPipeline:
                     "error": str(exc),
                 }
 
-        tasks = [ingest_safely(fp) for fp in file_paths]
-        results = await asyncio.gather(*tasks)
+        results = []
+        for file_path in file_paths:
+            results.append(await ingest_safely(file_path))
 
         elapsed = time.time() - start
         success = sum(1 for r in results if r["success"])
