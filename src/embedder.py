@@ -1,6 +1,6 @@
 """
-Encodes each text chunk into a dense embedding vector using
-the all-MiniLM-L6-v2 sentence transformer model.
+Encodes each text chunk into a dense embedding vector using a configurable
+sentence-transformer model.
 
 Model characteristics:
   - Embedding size: 384 dimensions
@@ -9,10 +9,12 @@ Model characteristics:
   - Multilingual support
 """
 
-from typing import List, Dict
-from sentence_transformers import SentenceTransformer
-from tqdm import tqdm 
-from config import EMBEDDING_MODEL 
+import logging
+from typing import Dict, List
+
+from config import EMBEDDING_MODEL
+
+logger = logging.getLogger(__name__)
 
 
 class Embedder:
@@ -26,9 +28,14 @@ class Embedder:
     """
 
     def __init__(self):
-        print(f"Loading embedding model: {EMBEDDING_MODEL}...")
+        # Importing sentence-transformers also imports the ML runtime. Keeping
+        # it here makes the web interface start quickly and loads the model only
+        # when the first document is processed.
+        from sentence_transformers import SentenceTransformer
+
+        logger.info("Loading embedding model: %s...", EMBEDDING_MODEL)
         self.model = SentenceTransformer(EMBEDDING_MODEL)
-        print(f"Model loaded successfully.")
+        logger.info("Embedding model loaded successfully.")
 
     def embed_text(self, text: str) -> List[float]:
         """
@@ -49,9 +56,9 @@ class Embedder:
         Input:  Output from chunker.py — List[Dict]
         Output: Same List[Dict] with an additional 'embedding' field
         """
-        print(f"Embedding {len(chunks)} chunks...")
+        logger.info("Embedding %s chunk(s)...", len(chunks))
         if not chunks:
-            print("No chunks to embed.\n")
+            logger.info("No chunks to embed.")
             return []
 
         texts = [chunk["text"] for chunk in chunks]
@@ -60,14 +67,17 @@ class Embedder:
         embeddings = self.model.encode(
             texts,
             batch_size=32,
-            show_progress_bar=True
+            show_progress_bar=False,
         )
 
         # Add embeddings to each chunk
-        for chunk, embedding in zip(chunks, embeddings):
+        for chunk, embedding in zip(chunks, embeddings, strict=False):
             chunk["embedding"] = embedding.tolist()
 
-        print(f"{len(chunks)} chunks embedded successfully.")
-        print(f"   Vector size: {len(embeddings[0])} dimensions\n")
+        logger.info(
+            "%s chunk(s) embedded (%s dimensions).",
+            len(chunks),
+            len(embeddings[0]),
+        )
 
         return chunks

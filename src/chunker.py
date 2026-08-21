@@ -8,9 +8,14 @@ Why is chunking necessary?
   - Overlap prevents meaning loss
 """
 
-from typing import List, Dict
+import logging
+from typing import Dict, List
+
 import tiktoken
-from config import CHUNK_SIZE, CHUNK_OVERLAP
+
+from config import CHUNK_OVERLAP, CHUNK_SIZE
+
+logger = logging.getLogger(__name__)
 
 
 def get_tokenizer():
@@ -28,11 +33,11 @@ def chunk_text(text: str, source_metadata: Dict) -> List[Dict]:
     Adds metadata to each chunk.
 
     How overlap works:
-    
+
     [----chunk 1----]
                 [----chunk 2----]
                 [overlap]
-    
+
     Without overlap, meaning can be lost:
     "...patient's blood pressure | 120/80 was..."
      chunk 1 ends here   chunk 2 starts here → meaning lost
@@ -58,14 +63,16 @@ def chunk_text(text: str, source_metadata: Dict) -> List[Dict]:
         chunk_tokens = tokens[start:end]
         chunk_text_str = tokenizer.decode(chunk_tokens)
 
-        if chunk_text_str.strip():    # Skip empty chunks
-            chunks.append({
-                "text": chunk_text_str,
-                "metadata": {
-                    **source_metadata,          # metadata from loader
-                    "chunk_index": chunk_index  # which chunk of this document
+        if chunk_text_str.strip():  # Skip empty chunks
+            chunks.append(
+                {
+                    "text": chunk_text_str,
+                    "metadata": {
+                        **source_metadata,  # metadata from loader
+                        "chunk_index": chunk_index,  # which chunk of this document
+                    },
                 }
-            })
+            )
             chunk_index += 1
 
         # Next chunk goes back by overlap amount
@@ -84,13 +91,17 @@ def chunk_documents(pages: List[Dict]) -> List[Dict]:
     """
     all_chunks = []
 
-    print(f"Chunking {len(pages)} pages...\n")
+    logger.info("Chunking %s page(s)...", len(pages))
 
     for page in pages:
         chunks = chunk_text(page["text"], page["metadata"])
         all_chunks.extend(chunks)
 
-    print(f"Total {len(all_chunks)} chunks created.")
-    print(f"   Average chunk: ~{CHUNK_SIZE} tokens, overlap: {CHUNK_OVERLAP} tokens\n")
+    logger.info(
+        "%s chunk(s) created (size: %s tokens, overlap: %s)",
+        len(all_chunks),
+        CHUNK_SIZE,
+        CHUNK_OVERLAP,
+    )
 
     return all_chunks

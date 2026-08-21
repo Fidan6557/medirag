@@ -4,18 +4,12 @@ vectorstore.py — Vector Database Module
 Stores chunk embeddings in ChromaDB.
 Finds the most relevant chunks via cosine-similarity search.
 
-Key fix vs original:
-  - add_chunks() previously called collection.get() with no filter, which
-    loads every stored embedding into RAM on large databases.
-  - Now it builds the new IDs first, then asks ChromaDB for only those
-    specific IDs — O(batch) instead of O(total collection).
+Chunks use deterministic IDs. Re-indexing a document replaces that source's
+existing chunks, which prevents stale passages after a file is edited.
 """
 
 import logging
-from typing import List, Dict
-
-import chromadb
-from chromadb.config import Settings
+from typing import Dict, List
 
 from config import CHROMA_PERSIST_DIR, COLLECTION_NAME, TOP_K
 
@@ -26,6 +20,9 @@ class VectorStore:
     """Manages persistent vector storage with ChromaDB."""
 
     def __init__(self):
+        import chromadb
+        from chromadb.config import Settings
+
         logger.info("Starting ChromaDB…")
 
         self.client = chromadb.PersistentClient(
@@ -48,65 +45,50 @@ class VectorStore:
     def add_chunks(self, chunks: List[Dict]) -> None:
         """
         Adds embedded chunks to ChromaDB.
-        Skips any chunk whose ID is already present (idempotent).
+
+        Existing chunks for the same source name are removed first, then the
+        new batch is upserted. This makes document re-ingestion idempotent and
+        prevents old trailing chunks from surviving when a file gets shorter.
         """
         if not chunks:
             logger.info("No chunks to add.")
             return
 
-        # Build candidate IDs first
+        # Build deterministic IDs first.
         candidate: Dict[str, Dict] = {}
         for chunk in chunks:
             m = chunk["metadata"]
-            cid = (
-                f"{m['source']}_page_{m['page']}"
-                f"_chunk_{m['chunk_index']}"
-            )
+            document_id = m.get("document_id", m["source"])
+            cid = f"{document_id}_page_{m['page']}_chunk_{m['chunk_index']}"
             candidate[cid] = chunk
 
-        # Ask ChromaDB only for the IDs we care about (cheap)
-        try:
-            existing_result = self.collection.get(
-                ids=list(candidate.keys()),
-                include=[],          # we only need the IDs, not the data
-            )
-            existing_ids = set(existing_result["ids"])
-        except Exception:
-            # get() with explicit ids never returns "not found" as an error,
-            # but guard anyway
-            existing_ids = set()
+        sources = {chunk["metadata"]["source"] for chunk in candidate.values()}
+        for source in sources:
+            self.collection.delete(where={"source": source})
 
-        new_ids, embeddings, metadatas, documents = [], [], [], []
-
+        ids, embeddings, metadatas, documents = [], [], [], []
         for cid, chunk in candidate.items():
-            if cid in existing_ids:
-                continue
-            new_ids.append(cid)
+            ids.append(cid)
             embeddings.append(chunk["embedding"])
             metadatas.append(chunk["metadata"])
             documents.append(chunk["text"])
 
-        if not new_ids:
-            logger.info("All chunks already exist — nothing new to add.")
-            return
-
-        self.collection.add(
-            ids=new_ids,
+        self.collection.upsert(
+            ids=ids,
             embeddings=embeddings,
             metadatas=metadatas,
             documents=documents,
         )
 
         logger.info(
-            f"{len(new_ids)} new chunk(s) added. "
-            f"Total: {self.collection.count()}\n"
+            "%s chunk(s) indexed. Total: %s",
+            len(ids),
+            self.collection.count(),
         )
 
     # ── read ──────────────────────────────────────────────────────────────────
 
-    def search(
-        self, query_embedding: List[float], top_k: int = TOP_K
-    ) -> List[Dict]:
+    def search(self, query_embedding: List[float], top_k: int = TOP_K) -> List[Dict]:
         """
         Returns the *top_k* chunks most similar to *query_embedding*.
 
@@ -124,17 +106,17 @@ class VectorStore:
             include=["documents", "metadatas", "distances"],
         )
 
-        docs      = (results.get("documents") or [[]])[0]
-        metas     = (results.get("metadatas") or [[]])[0]
+        docs = (results.get("documents") or [[]])[0]
+        metas = (results.get("metadatas") or [[]])[0]
         distances = (results.get("distances") or [[]])[0]
 
         return [
             {
-                "text":     doc,
+                "text": doc,
                 "metadata": meta,
-                "score":    round(max(0.0, min(1.0, 1 - dist)), 4),
+                "score": round(max(0.0, min(1.0, 1 - dist)), 4),
             }
-            for doc, meta, dist in zip(docs, metas, distances)
+            for doc, meta, dist in zip(docs, metas, distances, strict=False)
         ]
 
     # ── utility ───────────────────────────────────────────────────────────────
