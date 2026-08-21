@@ -89,8 +89,7 @@ def load_pdf(file_path: str) -> List[Dict]:
     if doc.is_encrypted:
         doc.close()
         raise ValueError(
-            f"'{Path(file_path).name}' is encrypted. "
-            "Please provide an unprotected PDF."
+            f"'{Path(file_path).name}' is encrypted. Please provide an unprotected PDF."
         )
 
     for page_num, page in enumerate(doc, start=1):
@@ -200,7 +199,7 @@ def load_document(file_path: str) -> List[Dict]:
 
     if ext not in loaders:
         raise ValueError(
-            f"Unsupported format: '{ext}'. " f"Supported: {', '.join(loaders)}"
+            f"Unsupported format: '{ext}'. Supported: {', '.join(loaders)}"
         )
 
     logger.info(f"Loading: {Path(file_path).name}")

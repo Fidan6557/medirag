@@ -175,7 +175,7 @@ async def chat(message: str, _history: list, language: str) -> str:
     score = max(0.0, min(1.0, float(result["score"])))
     match_label = "Strong" if score >= 0.55 else "Moderate"
     metadata = (
-        f"\n\n`{match_label} retrieval match · {score:.0%} · " f"{result['time']:.1f}s`"
+        f"\n\n`{match_label} retrieval match · {score:.0%} · {result['time']:.1f}s`"
     )
     return f"{result['answer']}{evidence}{metadata}"
 

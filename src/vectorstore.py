@@ -59,7 +59,7 @@ class VectorStore:
         for chunk in chunks:
             m = chunk["metadata"]
             document_id = m.get("document_id", m["source"])
-            cid = f"{document_id}_page_{m['page']}" f"_chunk_{m['chunk_index']}"
+            cid = f"{document_id}_page_{m['page']}_chunk_{m['chunk_index']}"
             candidate[cid] = chunk
 
         sources = {chunk["metadata"]["source"] for chunk in candidate.values()}
