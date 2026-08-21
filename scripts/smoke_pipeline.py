@@ -1,41 +1,34 @@
-"""
-test_day3.py — Full Pipeline Test
-PDF → loader → chunker → embedder → vectorstore → retriever → generator
-"""
+"""Run the complete pipeline against the sample PDF and live Groq API."""
 
 import asyncio
+
 from src.pipeline import MediRAGPipeline
 
 
-async def main():
-    # 1) Pipeline yarat
+async def main() -> None:
     pipeline = MediRAGPipeline()
-
-    # 2) Köhnə data-nı təmizlə
     pipeline.clear_knowledge_base()
 
-    # 3) PDF-i yüklə və işlə
-    print("\nDocument is loading...\n")
+    print("\nLoading and indexing the sample document...\n")
     await pipeline.ingest_document("data/raw/data_for_medirag.pdf")
 
-    # 4) Suallar ver
     questions = [
         "What are essential medicines?",
         "How are medicines selected?",
         "What is the role of WHO in medicine selection?",
     ]
 
-    print("\n" + "="*50)
+    print("\n" + "=" * 50)
     print("QUESTIONS")
-    print("="*50)
+    print("=" * 50)
 
-    for q in questions:
-        result = await pipeline.ask(q)
-        print(f"\nQuestion: {q}")
+    for question in questions:
+        result = await pipeline.ask(question)
+        print(f"\nQuestion: {question}")
         print(f"Answer: {result['answer'][:300]}...")
         print(f"Score: {result['score']:.2f}")
         print(f"Time: {result['time']:.1f}s")
-        print("-"*50)
+        print("-" * 50)
 
 
 if __name__ == "__main__":

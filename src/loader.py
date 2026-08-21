@@ -9,7 +9,7 @@ import logging
 import re
 from collections import Counter
 from pathlib import Path
-from typing import List, Dict
+from typing import Dict, List
 
 logger = logging.getLogger(__name__)
 
@@ -42,12 +42,11 @@ def _strip_repeated_pdf_lines(pages: List[Dict]) -> List[Dict]:
 
     repeated_threshold = max(3, int(len(pages) * 0.75 + 0.999))
     repeated_lines = {
-        line for line, count in line_counts.items()
-        if count >= repeated_threshold
+        line for line, count in line_counts.items() if count >= repeated_threshold
     }
 
     cleaned_pages = []
-    for page, lines in zip(pages, page_lines):
+    for page, lines in zip(pages, page_lines, strict=False):
         kept_lines = []
         for line in lines:
             if not line:
@@ -64,10 +63,12 @@ def _strip_repeated_pdf_lines(pages: List[Dict]) -> List[Dict]:
             continue
 
         if text:
-            cleaned_pages.append({
-                "text": text,
-                "metadata": page["metadata"],
-            })
+            cleaned_pages.append(
+                {
+                    "text": text,
+                    "metadata": page["metadata"],
+                }
+            )
 
     return cleaned_pages
 
@@ -102,14 +103,16 @@ def load_pdf(file_path: str) -> List[Dict]:
         if not text:
             continue  # skip blank pages
 
-        pages.append({
-            "text": text,
-            "metadata": {
-                "source": Path(file_path).name,
-                "page":   page_num,
-                "format": "pdf",
-            },
-        })
+        pages.append(
+            {
+                "text": text,
+                "metadata": {
+                    "source": Path(file_path).name,
+                    "page": page_num,
+                    "format": "pdf",
+                },
+            }
+        )
 
     doc.close()
     pages = _strip_repeated_pdf_lines(pages)
@@ -129,27 +132,26 @@ def load_docx(file_path: str) -> List[Dict]:
     """
     try:
         from docx import Document  # python-docx — lazy import
+
         doc = Document(file_path)
     except Exception as e:
-        raise ValueError(
-            f"Could not open DOCX '{Path(file_path).name}': {e}"
-        ) from e
+        raise ValueError(f"Could not open DOCX '{Path(file_path).name}': {e}") from e
 
-    full_text = "\n".join(
-        para.text for para in doc.paragraphs if para.text.strip()
-    )
+    full_text = "\n".join(para.text for para in doc.paragraphs if para.text.strip())
 
     if not full_text.strip():
         raise ValueError(f"'{Path(file_path).name}' appears to be empty.")
 
-    return [{
-        "text": full_text,
-        "metadata": {
-            "source": Path(file_path).name,
-            "page":   1,
-            "format": "docx",
-        },
-    }]
+    return [
+        {
+            "text": full_text,
+            "metadata": {
+                "source": Path(file_path).name,
+                "page": 1,
+                "format": "docx",
+            },
+        }
+    ]
 
 
 def load_txt(file_path: str) -> List[Dict]:
@@ -163,23 +165,23 @@ def load_txt(file_path: str) -> List[Dict]:
         with open(file_path, "r", encoding="latin-1") as f:
             text = f.read().strip()
     except Exception as e:
-        raise ValueError(
-            f"Could not read '{Path(file_path).name}': {e}"
-        ) from e
+        raise ValueError(f"Could not read '{Path(file_path).name}': {e}") from e
 
     if not text:
         raise ValueError(f"'{Path(file_path).name}' is empty.")
 
     fmt = Path(file_path).suffix.lstrip(".")  # "txt" or "md"
 
-    return [{
-        "text": text,
-        "metadata": {
-            "source": Path(file_path).name,
-            "page":   1,
-            "format": fmt,
-        },
-    }]
+    return [
+        {
+            "text": text,
+            "metadata": {
+                "source": Path(file_path).name,
+                "page": 1,
+                "format": fmt,
+            },
+        }
+    ]
 
 
 def load_document(file_path: str) -> List[Dict]:
@@ -190,16 +192,15 @@ def load_document(file_path: str) -> List[Dict]:
     ext = Path(file_path).suffix.lower()
 
     loaders = {
-        ".pdf":  load_pdf,
+        ".pdf": load_pdf,
         ".docx": load_docx,
-        ".txt":  load_txt,
-        ".md":   load_txt,
+        ".txt": load_txt,
+        ".md": load_txt,
     }
 
     if ext not in loaders:
         raise ValueError(
-            f"Unsupported format: '{ext}'. "
-            f"Supported: {', '.join(loaders)}"
+            f"Unsupported format: '{ext}'. " f"Supported: {', '.join(loaders)}"
         )
 
     logger.info(f"Loading: {Path(file_path).name}")
@@ -214,9 +215,9 @@ def load_directory(dir_path: str) -> List[Dict]:
     Loads all supported documents in a directory.
     Logs individual failures without stopping the whole batch.
     """
-    supported  = {".pdf", ".docx", ".txt", ".md"}
-    all_pages  = []
-    dir_path_  = Path(dir_path)
+    supported = {".pdf", ".docx", ".txt", ".md"}
+    all_pages = []
+    dir_path_ = Path(dir_path)
 
     if not dir_path_.exists():
         logger.warning(f"Directory not found: {dir_path}")
