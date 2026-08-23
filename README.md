@@ -1,4 +1,4 @@
-# 🩺 MediRAG
+# MediRAG
 
 MediRAG is a local Retrieval-Augmented Generation (RAG) application for asking
 questions about medical documents. It finds relevant excerpts in an on-device
