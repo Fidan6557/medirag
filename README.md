@@ -4,11 +4,6 @@ MediRAG is a local Retrieval-Augmented Generation (RAG) application for asking
 questions about medical documents. It finds relevant excerpts in an on-device
 vector index and asks a Groq-hosted language model to answer from that evidence.
 
-> [!WARNING]
-> MediRAG may produce incomplete or incorrect answers. It is not a medical
-> device and must not replace diagnosis, treatment, or professional medical
-> advice. Verify important information against the original document.
-
 ## Features
 
 - PDF, DOCX, TXT, and Markdown ingestion
